@@ -29,7 +29,7 @@ t = pd.DataFrame(filas)
 t.to_csv("results/tables/gradcam_concentracion.csv", index=False)
 print(t.to_string(index=False))
 
-# Figura 4 del artículo: 4 filas de results/gradcam/errores.png (mismas imágenes para los 3 modelos)
+# Figura 7 del artículo (Grad-CAM sobre grillas de 7x7 en ResNet-50 y 14x14 en ViT-S/16): 4 filas de results/gradcam/errores.png (mismas imágenes para los 3 modelos)
 from pathlib import Path
 from PIL import Image
 im = Image.open("results/gradcam/errores.png").convert("RGB")
