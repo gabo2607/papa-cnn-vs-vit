@@ -1,7 +1,12 @@
 \documentclass[conference,a4paper]{IEEEtran}
 \IEEEoverridecommandlockouts
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
+\usepackage{iftex}
+\ifLuaTeX
+  \usepackage{fontspec}
+\else
+  \usepackage[utf8]{inputenc}
+  \usepackage[T1]{fontenc}
+\fi
 \usepackage[spanish,es-noshorthands,es-tabla]{babel}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
@@ -31,11 +36,11 @@ MIA-203 Redes Neuronales y Aprendizaje Profundo --- Equipo 4, Sección A}}
 \maketitle
 
 \begin{abstract}
-Diagnosticar a tiempo las enfermedades de la papa es clave para un cultivo central en la seguridad alimentaria del Perú. Los modelos de visión suelen entrenarse con fotos de laboratorio, pero en campo hay fondos variados, manos, sombras y plásticos. Estudiamos si, con solo 2\,112 imágenes de entrenamiento tomadas en campo y 7 clases desbalanceadas, conviene una red convolucional (ResNet-50) o un Vision Transformer (ViT-S/16), y cuánto aporta el preentrenamiento en ImageNet. Primero auditamos el conjunto de datos público: encontramos 55 pares de duplicados exactos (6 de ellos con etiquetas contradictorias) y casi-duplicados, y construimos una partición 70/15/15 por grupos sin fuga de datos. Comparamos 6 configuraciones, con 3 semillas cada una: ResNet-50 y ViT-S/16, preentrenados y desde cero, y dos líneas base, un Random Forest con descriptores de color y textura y una CNN pequeña. Preentrenados, ResNet-50 y ViT-S/16 alcanzan macro-F1 de \pmsd{0.843}{0.012} y \pmsd{0.853}{0.013} en prueba, sin diferencia significativa según la prueba de McNemar ($p\geq0.16$). Ambos superan ampliamente al Random Forest (\pmsd{0.464}{0.021}). Sin preentrenamiento, el ViT cae a \pmsd{0.499}{0.028}, por debajo de la ResNet-50 entrenada desde cero (\pmsd{0.642}{0.007}). Es decir, con pocos datos el preentrenamiento importa más que la arquitectura. Grad-CAM muestra que la ResNet concentra su atención en la lesión, mientras que la CNN pequeña a veces usa atajos del fondo. Publicamos el código, la partición, los pesos y una demo reproducible.
+Diagnosticar a tiempo las enfermedades de la papa es clave para un cultivo central en la seguridad alimentaria del Perú. Los modelos de visión suelen entrenarse con fotos de laboratorio, pero en campo hay fondos variados, manos, sombras y plásticos. Estudiamos si, con solo 2\,112 imágenes de entrenamiento tomadas en campo y 7 clases desbalanceadas, conviene una red convolucional (ResNet-50) o un Vision Transformer (ViT-S/16), y cuánto aporta el preentrenamiento en ImageNet. Primero auditamos el conjunto de datos público: encontramos 55 pares de duplicados exactos (6 de ellos con etiquetas contradictorias) y casi-duplicados, y construimos una partición 70/15/15 por grupos sin fuga de datos. Comparamos 6 configuraciones, con 3 semillas cada una: ResNet-50 y ViT-S/16, preentrenados y desde cero, y dos líneas base, un Random Forest con descriptores de color y textura y una CNN pequeña. Preentrenados, ResNet-50 y ViT-S/16 alcanzan macro-F1 de \pmsd{0.843}{0.012} y \pmsd{0.853}{0.013} en prueba, sin diferencia significativa según la prueba de McNemar ($p\geq0.16$). Ambos superan ampliamente al Random Forest (\pmsd{0.464}{0.021}). Sin preentrenamiento, el ViT cae a \pmsd{0.499}{0.028}, por debajo de la ResNet-50 entrenada desde cero (\pmsd{0.642}{0.007}). Es decir, con pocos datos el preentrenamiento importa más que la arquitectura. En los ejemplos revisados con Grad-CAM, la ResNet enfoca las regiones con lesión, mientras que la CNN pequeña a veces usa atajos del fondo. Publicamos el código, la partición, los pesos y una demo reproducible.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Vision Transformer, ResNet, transferencia de aprendizaje, enfermedades de la papa, Grad-CAM, pocos datos.
+aprendizaje profundo, Vision Transformer, ResNet, transferencia de aprendizaje, enfermedades de la papa, Grad-CAM, pocos datos.
 \end{IEEEkeywords}
 
 %=====================================================================
@@ -54,8 +59,10 @@ Al mismo tiempo, los Vision Transformers (ViT)~\cite{dosovitskiy2021vit} han des
 \item \textbf{Interpretabilidad y demo.} Analizamos los errores con Grad-CAM, incluyendo una medida de concentración de los mapas, y publicamos el modelo final en una app web que lo ejecuta en el celular, además de una demo reproducible en Colab.
 \end{enumerate}
 
+El resto del artículo se organiza así: la Sección~\ref{sec:related} revisa trabajos relacionados; la Sección~\ref{sec:method} describe la metodología; la Sección~\ref{sec:results} presenta los resultados, que se discuten en la Sección~\ref{sec:discussion}; la Sección~\ref{sec:conclusions} concluye.
+
 %=====================================================================
-\section{Trabajos relacionados}
+\section{Trabajos relacionados}\label{sec:related}
 \textbf{CNN y transferencia de aprendizaje.} Las redes residuales~\cite{he2016resnet} permitieron entrenar CNN profundas mediante conexiones de identidad. Su preentrenamiento en ImageNet~\cite{deng2009imagenet} es el punto de partida estándar con pocos datos. En plantas, Mohanty \textit{et al.}~\cite{mohanty2016plant} y Ferentinos~\cite{ferentinos2018plant} alcanzaron más de 99\,\% de exactitud en PlantVillage, pero advierten que el desempeño cae con imágenes de campo. Nuestro trabajo usa precisamente fotos de campo.
 
 \textbf{Transformers en visión.} El Transformer~\cite{vaswani2017attention} reemplaza la convolución por autoatención. El ViT~\cite{dosovitskiy2021vit} lo aplica a parches de $16\times16$ píxeles y supera a las CNN solo cuando se preentrena en conjuntos muy grandes. DeiT~\cite{touvron2021deit} y Steiner \textit{et al.}~\cite{steiner2022howtotrain} mostraron que la regularización y el preentrenamiento compensan en parte la falta de sesgo inductivo. Raghu \textit{et al.}~\cite{raghu2021vitsee} encontraron que el ViT integra información global desde las primeras capas, a diferencia de la CNN. Nosotros medimos este contraste en un problema real con solo $\sim$2\,100 imágenes.
@@ -65,7 +72,7 @@ Al mismo tiempo, los Vision Transformers (ViT)~\cite{dosovitskiy2021vit} han des
 \textbf{Interpretabilidad y atajos.} Grad-CAM~\cite{selvaraju2017gradcam} localiza las regiones que más influyen en una clase. Su aplicación a ViT es menos fiel que en CNN~\cite{chefer2021transformer}, lo que consideramos al interpretar. Geirhos \textit{et al.}~\cite{geirhos2020shortcut} describen el \emph{aprendizaje por atajos}: decidir por pistas espurias del fondo. Lo observamos en nuestra CNN pequeña.
 
 %=====================================================================
-\section{Metodología}
+\section{Metodología}\label{sec:method}
 \begin{figure*}[t]
 \centering
 \resizebox{\textwidth}{!}{%
@@ -191,7 +198,7 @@ p_{i,k}=\frac{e^{z_{i,k}}}{\sum_{j=1}^{K}e^{z_{i,j}}},
 \end{equation}
 con pesos $w_k=\frac{1/n_k}{\frac{1}{K}\sum_{j}1/n_j}$, donde $n_k$ es el número de imágenes de la clase $k$ en entrenamiento y $K=7$. La pérdida es la media ponderada del minibatch de tamaño $B$, que es lo que calcula \texttt{CrossEntropyLoss} de PyTorch cuando recibe pesos. Así, la clase nematodos (47 imágenes) pesa 3.5 y la clase hongos, 0.32.
 
-\textbf{Optimizador y calendario.} Usamos AdamW~\cite{loshchilov2019adamw} (Tabla~\ref{tab:hp}). La tasa de aprendizaje sube linealmente durante 2 épocas y luego decae con coseno hasta cero:
+\textbf{Optimizador y calendario.} Usamos AdamW~\cite{loshchilov2019adamw} (Tabla~\ref{tab:hp}), con tasas de aprendizaje tomadas de configuraciones estándar de la literatura~\cite{dosovitskiy2021vit,steiner2022howtotrain} y verificadas en validación. La tasa de aprendizaje sube linealmente durante 2 épocas y luego decae con coseno hasta cero:
 \begin{equation}
 \eta_t=\begin{cases}\eta_{\max}\,\frac{t+1}{T_w}, & t<T_w\\[2pt]
 \frac{\eta_{\max}}{2}\Big(1+\cos\frac{\pi(t-T_w)}{T-T_w}\Big), & t\geq T_w\end{cases}
@@ -206,6 +213,7 @@ con $t$ en pasos de minibatch.
 \caption{Hiperparámetros (AdamW, lote 32, 40 épocas, 224$\times$224)}
 \label{tab:hp}
 \centering\small
+\resizebox{\columnwidth}{!}{
 \begin{tabular}{lccc}
 \toprule
 Modelo & $\eta_{\max}$ (pre / cero) & \textit{Weight decay} & Parámetros \\
@@ -214,7 +222,8 @@ CNN pequeña & -- / $10^{-3}$ & 0.01 & 1.2\,M \\
 ResNet-50 & $3{\times}10^{-4}$ / $10^{-3}$ & 0.05 & 23.5\,M \\
 ViT-S/16 & $10^{-4}$ / $5{\times}10^{-4}$ & 0.05 & 21.7\,M \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}                              
 \end{table}
 
 \subsection{Métricas y prueba estadística}
@@ -241,7 +250,7 @@ Para cuantificar la forma de los mapas medimos dos cosas:
 \end{itemize}
 
 %=====================================================================
-\section{Resultados}
+\section{Resultados}\label{sec:results}
 
 \begin{table}[t]
 \caption{Resultados en prueba (453 imágenes), media $\pm$ DE sobre 3 semillas. \textbf{Negrita}: mejor.}
@@ -298,7 +307,7 @@ Semilla & Solo ResNet acierta ($b$) & Solo ViT acierta ($c$) & $p$ \\
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.82\textwidth]{figs/f1_por_clase.png}
-\caption{F1 por clase en prueba (media y DE sobre 3 semillas; $n$ = imágenes de prueba por clase). Los modelos preentrenados dominan en todas las clases; la mayor brecha con las líneas base está en nematodos, sana y plaga.}
+\caption{F1 por clase en prueba (media y DE sobre 3 semillas; $n$ = imágenes de prueba por clase). Los modelos preentrenados dominan en todas las clases; la mayor brecha con las líneas base está en nematodos, sana y plaga. Las etiquetas se muestran con los nombres originales del dataset en inglés (\textit{fungi}=hongos, \textit{healthy}=sana, \textit{nematode}=nematodos, \textit{pest}=plaga).}
 \label{fig:f1}
 \end{figure*}
 
@@ -357,9 +366,9 @@ Hongos es la clase más numerosa y la de síntomas más variados (manchas necró
 \end{figure}
 
 \subsection{Interpretabilidad (Grad-CAM)}
-La Fig.~\ref{fig:cam} compara los mapas de los tres modelos sobre las mismas imágenes de prueba; la Tabla~\ref{tab:cam} los cuantifica sobre 22 imágenes.
+La Tabla~\ref{tab:cam} cuantifica los mapas sobre 22 imágenes de prueba (14 aciertos, 2 por clase, y 8 errores elegidos al azar) usando la mejor corrida de cada arquitectura (CNN pequeña s2, ResNet-50 preentrenada s1 y ViT-S/16 preentrenado s2). La Fig.~\ref{fig:cam} ilustra 4 casos representativos de ese subconjunto. Cabe notar que la masa central refleja también que las hojas suelen estar centradas en la foto, y que la ResNet calcula Grad-CAM sobre una rejilla de $7\times7$ frente a $14\times14$ del ViT; al interpolarse a $224\times224$, un mapa más grueso tiende a concentrar mayor masa en el top-10\,\%.
 \begin{itemize}
-\item \textbf{ResNet-50:} produce mapas compactos (masa top-10\,\% = 0.50) centrados en la lesión. Por ejemplo, señala la mancha necrótica en \textit{Phytophthora} (fila~3) y la perforación en plaga (fila~4).
+\item \textbf{ResNet-50:} produce mapas compactos (masa top-10\,\% = 0.50) centrados en la lesión. Por ejemplo, señala la mancha necrótica en \textit{Phytophthora} (fila~3) y la perforación en plaga (fila~4). En casos complejos ambos modelos fallan: en la fila~1 la ResNet confunde bacteria con \textit{Phytophthora}, y en la fila~2 tanto ResNet como ViT confunden una lesión avanzada de \textit{Phytophthora} con hongos.
 \item \textbf{ViT-S/16:} sus mapas son más dispersos (0.29), casi tan repartidos como un mapa uniforme en la región central (0.27 frente a 0.25). Esto es coherente con su atención global~\cite{raghu2021vitsee}, aunque Grad-CAM es menos fiel en Transformers~\cite{chefer2021transformer}. Aun así, en la fila~3 se concentra en la misma lesión que la ResNet.
 \item \textbf{CNN pequeña:} muestra \emph{aprendizaje por atajos}~\cite{geirhos2020shortcut}. En la fila~1 acierta ``bacteria'' mirando el plástico de \textit{mulch} del fondo, no la hoja. En la fila~3 predice ``sana'' porque atiende a las nervaduras en lugar de la lesión.
 \end{itemize}
@@ -388,6 +397,13 @@ Mapa uniforme (referencia) & 0.10 & 0.25 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/app_web.jpg}
+\caption{App web con el modelo final (capturas en un celular). Izquierda: parcelas de papa en un mapa satelital; la parcela con un diagnóstico de enfermedad pasa a ``Alerta''. Centro: diagnóstico de una foto de prueba de rancha, con el mapa Grad-CAM y la confianza. Derecha: historial con calendario y el diagnóstico guardado.}
+\label{fig:app}
+\end{figure*}
 
 \subsection{Costo computacional}
 Usamos dos equipos: Google Colab (Tesla T4, 16\,GB) y una laptop con GeForce GTX 1650 Ti de 4\,GB. Las 15 corridas de redes neuronales suman $\approx$5.9\,h de GPU; el Random Forest corre en CPU (Tabla~\ref{tab:cost}).
@@ -429,31 +445,24 @@ Elegimos como modelo final la corrida con mayor macro-F1 de \emph{validación}, 
 \end{itemize}
 También hay una demo en Colab y otra local con Gradio, con las mismas salidas.
 
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.8\textwidth]{figs/app_web.jpg}
-\caption{App web con el modelo final (capturas en un celular). Izquierda: parcelas de papa en un mapa satelital; la parcela con un diagnóstico de enfermedad pasa a ``Alerta''. Centro: diagnóstico de una foto de prueba de rancha, con el mapa Grad-CAM y la confianza. Derecha: historial con calendario y el diagnóstico guardado.}
-\label{fig:app}
-\end{figure*}
-
 %=====================================================================
-\section{Discusión}
+\section{Discusión}\label{sec:discussion}
 \textbf{¿Por qué gana el preentrenamiento y no la arquitectura?} Con 2\,112 imágenes, las representaciones aprendidas en ImageNet (bordes, texturas, partes de objetos) son más valiosas que el sesgo inductivo de cada arquitectura. Ese sesgo solo marca diferencia cuando falta el preentrenamiento: la convolución aporta localidad ``gratis'' y por eso la ResNet desde cero aguanta mejor que el ViT.
 
 \textbf{Sesgos y validez.} Hay que tener en cuenta varias limitaciones:
 \begin{itemize}
 \item \textbf{Generalización geográfica:} todas las fotos provienen de una región de Indonesia, con variedades, iluminación y fondos propios. No sabemos cómo se comportaría el modelo con cultivos andinos.
 \item \textbf{Clases pequeñas:} nematodos tiene solo 10 imágenes de prueba, así que su F1 es muy incierto.
-\item \textbf{Brecha validación--prueba:} el modelo final obtuvo 0.929 en validación y 0.864 en prueba. Esa brecha refleja la optimización sobre la validación, que se usa para elegir época y modelo, y confirma la importancia de reservar un conjunto de prueba intocado.
+\item \textbf{Brecha validación--prueba:} el modelo final obtuvo 0.929 en validación y 0.864 en prueba. Como esta caída de 0.04 a 0.07 aparece en todos los modelos (también en el promedio de corridas no seleccionadas: ViT preentrenado 0.922 en validación frente a 0.853 en prueba; ResNet preentrenada 0.900 frente a 0.843), se debe en parte a que la partición de prueba resultó más difícil que la de validación y en parte a elegir época y modelo con la validación.
 \item \textbf{Comparabilidad con lo publicado:} no podemos comparar directamente con~\cite{shabrina2024potato}, porque su partición no controla duplicados.
-\item \textbf{Hardware mixto:} una semilla de ResNet preentrenada se entrenó en otra GPU.
+\item \textbf{Hardware mixto:} la semilla 0 de la ResNet preentrenada se entrenó en la laptop (GTX 1650 Ti) y las semillas 1 y 2 en la Tesla T4 de Colab.
 \end{itemize}
 
 \textbf{Uso responsable.} El sistema es una herramienta de apoyo y no reemplaza el diagnóstico de un agrónomo. Una predicción errónea puede llevar a aplicar un fungicida innecesario o a no tratar una plaga a tiempo. Por eso la demo muestra la confianza, el Grad-CAM y advierte cuando la confianza es baja. Antes de usarlo en el Perú haría falta validarlo con fotos locales.
 
 %=====================================================================
-\section{Conclusiones}
-En la detección de 7 enfermedades de la papa con fotos de campo y pocos datos, ResNet-50 y ViT-S/16 preentrenados no muestran diferencia significativa (macro-F1 0.84--0.85) y superan ampliamente a las líneas base. El preentrenamiento es el factor decisivo, en especial para el Transformer ($+0.355$). Grad-CAM revela que las redes pequeñas pueden apoyarse en atajos del fondo.
+\section{Conclusiones}\label{sec:conclusions}
+En la detección de 7 enfermedades de la papa con fotos de campo y pocos datos, ResNet-50 y ViT-S/16 preentrenados no muestran diferencia significativa (macro-F1 0.84--0.85) y superan ampliamente a las líneas base. El preentrenamiento es el factor decisivo, en especial para el Transformer ($+0.355$). En los casos analizados, Grad-CAM muestra que la ResNet suele enfocar las lesiones mientras que una red pequeña puede apoyarse en atajos del fondo.
 
 Como trabajo futuro proponemos:
 \begin{itemize}
