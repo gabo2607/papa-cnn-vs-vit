@@ -45,3 +45,5 @@ Este script:
 | phytophthora | 217 | 46 | 46 | 309 |
 | virus | 373 | 78 | 79 | 530 |
 | **total** | **2112** | **450** | **453** | **3015** |
+
+**Nota de auditoría:** Sin el agrupamiento por dHash (distancia de Hamming <= 4), aproximadamente el 4 % de las imágenes del conjunto de prueba (~18 de 453 fotos) tendrían un duplicado exacto o casi-duplicado en entrenamiento.
